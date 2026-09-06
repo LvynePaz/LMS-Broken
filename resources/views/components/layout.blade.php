@@ -11,7 +11,7 @@
         <div class="container mx-auto flex justify-between items-center">
             <a href="/" class="font-bold text-xl">KampusLMS</a>
             <div class="space-x-4">
-                <a href="/courses" class="hover:underline">Mata Kuliah</a>
+                <a href="{{ route('courses.index') }}" class="hover:underline">Mata Kuliah</a>
                 <a href="/tentang" class="hover:underline">Tentang</a>
             </div>
         </div>

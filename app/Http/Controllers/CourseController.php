@@ -38,7 +38,11 @@ class CourseController extends Controller
 
     public function index()
     {
-        return view('courses.index', ['courses' => $this->courses]);
+        $courses = array_filter($this->courses, function ($course) {
+            return $course['status'] === 'active';
+        });
+
+        return view('courses.index', compact('courses'));
     }
 
     public function create()
