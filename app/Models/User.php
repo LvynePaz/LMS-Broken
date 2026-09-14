@@ -10,7 +10,8 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable;
 
-    protected $guarded = [];
+    // Bug 6 Fix: $guarded = [] rawan mass assignment, role tidak boleh di fillable
+    protected $fillable = ['name', 'email', 'password', 'nim_nip'];
 
     protected function casts(): array
     {

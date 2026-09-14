@@ -20,7 +20,22 @@ class UserController extends Controller
 
     public function store(Request $request)
     {
-        User::create($request->all());
+        // Bug 7 Fix: $request->all() berbahaya, gunakan only() + isi role eksplisit
+        $validated = $request->validate([
+            'name'     => 'required|string|max:255',
+            'email'    => 'required|email|unique:users,email',
+            'password' => 'required|string|min:8',
+            'nim_nip'  => 'nullable|string|unique:users,nim_nip',
+            'role'     => 'required|in:admin,dosen,mahasiswa',
+        ]);
+
+        User::create([
+            'name'     => $validated['name'],
+            'email'    => $validated['email'],
+            'password' => $validated['password'],
+            'nim_nip'  => $validated['nim_nip'] ?? null,
+            'role'     => $validated['role'],   // diisi eksplisit setelah validasi
+        ]);
 
         return redirect()->route('users.index')->with('success', 'User berhasil ditambahkan');
     }
@@ -37,7 +52,20 @@ class UserController extends Controller
 
     public function update(Request $request, User $user)
     {
-        $user->update($request->all());
+        // Bug 7 Fix: $request->all() berbahaya di update juga
+        $validated = $request->validate([
+            'name'    => 'required|string|max:255',
+            'email'   => 'required|email|unique:users,email,' . $user->id,
+            'nim_nip' => 'nullable|string|unique:users,nim_nip,' . $user->id,
+            'role'    => 'required|in:admin,dosen,mahasiswa',
+        ]);
+
+        $user->update([
+            'name'    => $validated['name'],
+            'email'   => $validated['email'],
+            'nim_nip' => $validated['nim_nip'] ?? null,
+            'role'    => $validated['role'],
+        ]);
 
         return redirect()->route('users.index')->with('success', 'User berhasil diperbarui');
     }
