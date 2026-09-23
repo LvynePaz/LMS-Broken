@@ -14,19 +14,26 @@ class CourseController extends Controller
     {
         Gate::authorize('viewAny', Course::class);
 
-        $query = Course::with('lecturer')->withCount('students');
+        $user = $request->user();
+        $role = $user->role ?: 'mahasiswa';
+        $query = (match ($role) {
+            'admin'     => Course::query(),
+            'dosen'     => $user->taughtCourses(),
+            'mahasiswa' => $user->courses(),
+            default     => abort(403),
+        })->with('lecturer')->withCount('students');
 
         if ($request->filled('search')) {
             $query->where(function ($q) use ($request) {
-                $q->where('name', 'like', '%'.$request->search.'%')
-                  ->orWhere('code', 'like', '%'.$request->search.'%');
+                $q->where('courses.name', 'like', '%'.$request->search.'%')
+                  ->orWhere('courses.code', 'like', '%'.$request->search.'%');
             });
         }
 
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            $query->where('courses.status', $request->status);
         } else {
-            $query->where('status', 'active');
+            $query->where('courses.status', 'active');
         }
 
         $courses = $query->paginate(10)->withQueryString();
@@ -81,6 +88,8 @@ class CourseController extends Controller
 
     public function update(Request $request, Course $course)
     {
+        Gate::authorize('update', $course);
+
         $validated = $request->validate([
             'code' => ['required', 'string', 'max:20', Rule::unique('courses', 'code')->ignore($course->id)],
             'name' => 'required|string|max:255',
@@ -97,6 +106,8 @@ class CourseController extends Controller
 
     public function destroy(Course $course)
     {
+        Gate::authorize('delete', $course);
+
         $course->delete();
 
         return redirect()->route('courses.index')->with('success', 'Mata kuliah berhasil dihapus.');

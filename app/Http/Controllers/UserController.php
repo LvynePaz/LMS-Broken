@@ -12,6 +12,8 @@ class UserController extends Controller
 {
     public function index(Request $request)
     {
+        Gate::authorize('viewAny', User::class);
+
         $query = User::query();
 
         if ($request->filled('role')) {
@@ -89,7 +91,7 @@ class UserController extends Controller
             $user->password = Hash::make($validated['password']);
         }
 
-        if ($request->has('role')) {
+        if ($request->has('role') && Gate::allows('updateRole', $user)) {
             $request->validate(['role' => 'required|in:admin,dosen,mahasiswa']);
             $user->role = $request->role;
         }
