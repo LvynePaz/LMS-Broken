@@ -34,7 +34,7 @@
                     <option value="">-- Pilih Dosen --</option>
                     @foreach($lecturers as $dosen)
                     <option value="{{ $dosen->id }}" {{ old('lecturer_id') == $dosen->id ? 'selected' : '' }}>
-                        {{ $dosen->name }} ({{ $dosen->nim_nip }})
+                        {{ $dosen->name }}
                     </option>
                     @endforeach
                 </select>

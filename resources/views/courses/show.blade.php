@@ -156,6 +156,14 @@
                             {{ $assignment->title }}
                         </a>
                         <p class="text-xs text-gray-500 mt-0.5">Deadline: {{ $assignment->due_at->format('d M Y H:i') }}</p>
+                        <div class="mt-2 text-xs text-gray-500">
+                            <span class="font-medium">Pengumpulan:</span>
+                            @forelse($assignment->submissions as $submission)
+                                <span class="inline-block bg-blue-50 text-blue-700 rounded px-1.5 py-0.5 text-xs mr-1">{{ $submission->student->name }}</span>
+                            @empty
+                                <span class="text-gray-400">Belum ada</span>
+                            @endforelse
+                        </div>
                     </div>
                     <div class="flex items-center space-x-2">
                         <a href="{{ route('assignments.show', $assignment) }}" class="px-3 py-1 bg-gray-200 text-gray-800 text-xs font-medium rounded-md hover:bg-gray-300">
