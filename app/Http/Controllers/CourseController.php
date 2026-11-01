@@ -38,7 +38,7 @@ class CourseController extends Controller
     {
         Gate::authorize('create', Course::class);
 
-        $lecturers = User::where('role', 'dosen')->get();
+        $lecturers = User::where('role', 'dosen')->select('id', 'name')->get();
 
         return view('courses.create', compact('lecturers'));
     }
@@ -65,7 +65,7 @@ class CourseController extends Controller
     {
         Gate::authorize('view', $course);
 
-        $course->load(['lecturer', 'materials']);
+        $course->load(['lecturer', 'materials', 'assignments.submissions.student']);
 
         return view('courses.show', compact('course'));
     }
@@ -74,7 +74,7 @@ class CourseController extends Controller
     {
         Gate::authorize('update', $course);
 
-        $lecturers = User::where('role', 'dosen')->get();
+        $lecturers = User::where('role', 'dosen')->select('id', 'name')->get();
 
         return view('courses.edit', compact('course', 'lecturers'));
     }

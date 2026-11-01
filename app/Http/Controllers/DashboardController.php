@@ -14,8 +14,8 @@ class DashboardController extends Controller
         $user = $request->user();
 
         if ($user->role === 'admin') {
-            $totalUsers = User::all()->count();
-            $totalCourses = Course::all()->count();
+            $totalUsers = User::count();
+            $totalCourses = Course::count();
             $recentCourses = Course::with('lecturer')->latest()->take(5)->get();
 
             return view('dashboard.admin', compact('totalUsers', 'totalCourses', 'recentCourses'));
